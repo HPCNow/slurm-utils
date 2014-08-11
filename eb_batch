@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# This script is a wrapper of EasyBuild command line (eb) that creates an 
+# interactive slurm allocation.
+# * It provides a comprensive log in order to know who installed what.
+# * It routes the interactive job to a defined partition
+# * It uses an specific account to build and install the applications (UID)
+# In order to run the job as a different user, you will need to setup a similar
+# rule in /etc/sudoers:
+# %admin ALL=(ALL)       /usr/bin/salloc
+#
+# Developed by Jordi Blasco <jordi.blasco@nesi.org.nz>
+# Based on Alan Orth interactive script
+# URL : https://github.com/alanorth/hpc_infrastructure_scripts/blob/master/slurm/interactive
+#
+# defaults
+    if [ $(grep E5-2680 /proc/cpuinfo|wc -l)  -gt 0 ]
+    then
+        DEF_ARCH=sb
+    else
+        DEF_ARCH=wm
+    fi
+
+DEF_NUM_CPUS=4
+DEF_MEM_PER_CPU=4
+DEF_PARTITION=high
+DEF_JOB_NAME=EasyBuild
+DEF_ACCOUNT=nesi99999
+DEF_UID=5674
+DEF_TIME=12:00:00
+DEF_RUNEXEC="eb --tmp-logdir=/share/easybuild/log/tmp $@"
+
+######
+ 
+function envsetup() {
+    SALLOC_BIN=/usr/bin/salloc
+    SALLOC_OPTS="--cpus-per-task=$DEF_NUM_CPUS"
+    SALLOC_OPTS="$SALLOC_OPTS --mem-per-cpu=$(($DEF_MEM_PER_CPU*1024))"
+    SALLOC_OPTS="$SALLOC_OPTS -J $DEF_JOB_NAME"
+    SALLOC_OPTS="$SALLOC_OPTS -A $DEF_ACCOUNT"
+    SALLOC_OPTS="$SALLOC_OPTS -C $DEF_ARCH"
+
+    SRUN_BIN=/usr/bin/srun
+    # add the interactive partition
+    SALLOC_OPTS="$SALLOC_OPTS -p $DEF_PARTITION"
+    # add the nesi.apps UID
+    SALLOC_OPTS="$SALLOC_OPTS --uid=$DEF_UID"
+    # add the default time limit
+    SALLOC_OPTS="$SALLOC_OPTS -t $DEF_TIME"
+    # add working directory 
+    SALLOC_OPTS="$SALLOC_OPTS -D /share/easybuild/jobs"
+
+    SRUN_OPTS="$DEF_RUNEXEC"
+}
+
+# setup the defaults
+envsetup
+
+echo "$(date)    $USER    $SRUN_OPTS $INTERACTIVE_SHELL" >> /share/easybuild/log/eb_batch.log 
+echo "---------------------------------------------------"
+echo "EB activity log : /share/easybuild/log/eb_batch.log"
+echo "EB tmp logs     : /share/easybuild/log/tmp"
+echo "---------------------------------------------------"
+sudo HOME=/home/nesi.apps PYTHONPATH=/share/easybuild/installation/lib/python2.6/site-packages  $SALLOC_BIN $SALLOC_OPTS $SRUN_BIN $SRUN_OPTS
+sudo HOME=/home/nesi.apps PYTHONPATH=/share/easybuild/installation/lib/python2.6/site-packages  $SALLOC_BIN $SALLOC_OPTS $SRUN_BIN /share/apps/lmod/utils/BuildSystemCacheFile/createSystemCacheFile.sh
