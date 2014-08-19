@@ -3,7 +3,7 @@
 # This script is a wrapper of EasyBuild command line (eb) that submits a job via Slurm 
 # Workload manager for each architecture
 #
-# * It provides a comprensive log in order to know who installed what.
+# * It provides a comprehensive log in order to know who installed what.
 # * It routes the interactive job to a defined partition
 # * It uses an specific account to build and install the applications (UID)
 # In order to run the job as a different user, you will need to setup a similar
