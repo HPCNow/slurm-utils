@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# This script is a wrapper of EasyBuild command line (eb) that creates an 
-# interactive slurm allocation.
+# This script is a wrapper of EasyBuild command line (eb) that submits a job via Slurm 
+# Workload manager for each architecture
+#
 # * It provides a comprensive log in order to know who installed what.
 # * It routes the interactive job to a defined partition
 # * It uses an specific account to build and install the applications (UID)
@@ -14,14 +15,7 @@
 # URL : https://github.com/alanorth/hpc_infrastructure_scripts/blob/master/slurm/interactive
 #
 # defaults
-    if [ $(grep E5-2680 /proc/cpuinfo|wc -l)  -gt 0 ]
-    then
-        DEF_ARCH=sb
-    else
-        DEF_ARCH=wm
-    fi
-
-DEF_NUM_CPUS=4
+DEF_NUM_CPUS=8
 DEF_MEM_PER_CPU=4
 DEF_PARTITION=high
 DEF_JOB_NAME=EasyBuild
@@ -38,7 +32,6 @@ function envsetup() {
     SBATCH_OPTS="$SBATCH_OPTS --mem-per-cpu=$(($DEF_MEM_PER_CPU*1024))"
     SBATCH_OPTS="$SBATCH_OPTS -J $DEF_JOB_NAME"
     SBATCH_OPTS="$SBATCH_OPTS -A $DEF_ACCOUNT"
-    SBATCH_OPTS="$SBATCH_OPTS -C $DEF_ARCH"
 
     SRUN_BIN=/usr/bin/srun
     # add the interactive partition
@@ -61,5 +54,7 @@ echo "---------------------------------------------------"
 echo "EB activity log : /share/easybuild/log/eb_batch.log"
 echo "EB tmp logs     : /share/easybuild/log/tmp"
 echo "---------------------------------------------------"
-#sudo HOME=/home/nesi.apps PYTHONPATH=/share/easybuild/installation/lib/python2.6/site-packages  $SBATCH_BIN $SBATCH_OPTS $SRUN_BIN $SRUN_OPTS
-sudo HOME=/home/nesi.apps PYTHONPATH=/share/easybuild/installation/lib/python2.6/site-packages  $SBATCH_BIN $SBATCH_OPTS --wrap "$SRUN_BIN $SRUN_OPTS; $SRUN_BIN /share/apps/lmod/utils/BuildSystemCacheFile/createSystemCacheFile.sh"
+# -C wm means westmere architecture and -C sb means sandybridge architecture
+sudo HOME=/home/nesi.apps PYTHONPATH=/share/easybuild/installation/lib/python2.6/site-packages  $SBATCH_BIN $SBATCH_OPTS -C wm --wrap "$SRUN_BIN $SRUN_OPTS"
+sudo HOME=/home/nesi.apps PYTHONPATH=/share/easybuild/installation/lib/python2.6/site-packages  $SBATCH_BIN $SBATCH_OPTS -C sb --wrap "$SRUN_BIN $SRUN_OPTS"
+squeue -u nesi.apps
