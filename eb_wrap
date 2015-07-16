@@ -10,19 +10,24 @@
 # rule in /etc/sudoers:
 # %admin ALL=(ALL)       /usr/bin/sbatch
 #
-# Developed by Jordi Blasco <jordi.blasco@nesi.org.nz>
+# Developed by Jordi Blasco <jordi.blasco@hpcnow.com>
 # Based on Alan Orth interactive script
 # URL : https://github.com/alanorth/hpc_infrastructure_scripts/blob/master/slurm/interactive
 #
 # defaults
+if [ $USER != "snow" ] ; then
+   echo "You need to use snow account!"
+   exit 0
+fi
+
 DEF_NUM_CPUS=8
 DEF_MEM_PER_CPU=4
-DEF_PARTITION=high
+DEF_PARTITION=easybuild
 DEF_JOB_NAME=EasyBuild
-DEF_ACCOUNT=nesi99999
-DEF_UID=5674
+DEF_ACCOUNT=snow
+DEF_UID=1000
 DEF_TIME=12:00:00
-DEF_RUNEXEC="eb --tmp-logdir=/share/easybuild/log/tmp $@"
+DEF_RUNEXEC="eb --tmp-logdir=/sNow/easybuild/log/tmp $@"
 
 ######
  
@@ -33,15 +38,15 @@ function envsetup() {
     SBATCH_OPTS="$SBATCH_OPTS -J $DEF_JOB_NAME"
     SBATCH_OPTS="$SBATCH_OPTS -A $DEF_ACCOUNT"
 
-    SRUN_BIN=/usr/bin/srun
+    SRUN_BIN="/usr/bin/srun"
     # add the interactive partition
     SBATCH_OPTS="$SBATCH_OPTS -p $DEF_PARTITION"
-    # add the nesi.apps UID
+    # add the snow UID
     SBATCH_OPTS="$SBATCH_OPTS --uid=$DEF_UID"
     # add the default time limit
     SBATCH_OPTS="$SBATCH_OPTS -t $DEF_TIME"
     # add working directory 
-    SBATCH_OPTS="$SBATCH_OPTS -D /share/easybuild/jobs"
+    SBATCH_OPTS="$SBATCH_OPTS -D /sNow/easybuild/jobs"
 
     SRUN_OPTS="$DEF_RUNEXEC"
 }
@@ -49,12 +54,10 @@ function envsetup() {
 # setup the defaults
 envsetup
 
-echo "$(date)    $USER    $SRUN_OPTS $INTERACTIVE_SHELL" >> /share/easybuild/log/eb_batch.log 
+echo "$(date)    $(logname)    $SRUN_OPTS $INTERACTIVE_SHELL" >> /sNow/easybuild/log/eb_batch.log 
 echo "---------------------------------------------------"
-echo "EB activity log : /share/easybuild/log/eb_batch.log"
-echo "EB tmp logs     : /share/easybuild/log/tmp"
+echo "EB activity log : /sNow/easybuild/log/eb_batch.log"
+echo "EB tmp logs     : /sNow/easybuild/log/tmp"
 echo "---------------------------------------------------"
-# -C wm means westmere architecture and -C sb means sandybridge architecture
-sudo HOME=/home/nesi.apps PYTHONPATH=/share/easybuild/installation/lib/python2.6/site-packages  $SBATCH_BIN $SBATCH_OPTS -C wm --wrap "$SRUN_BIN $SRUN_OPTS"
-sudo HOME=/home/nesi.apps PYTHONPATH=/share/easybuild/installation/lib/python2.6/site-packages  $SBATCH_BIN $SBATCH_OPTS -C sb --wrap "$SRUN_BIN $SRUN_OPTS"
-squeue -u nesi.apps
+$SBATCH_BIN $SBATCH_OPTS --wrap "$SRUN_BIN $SRUN_OPTS ; /sNow/utils/bin/update_module_index"
+squeue -u snow
