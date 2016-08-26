@@ -23,16 +23,23 @@
 #
 #    salloc -n1 srun --x11 --pty bash
 
-# defaults
-DEF_ARCH=hsw
-DEF_NUM_CPUS=1
-DEF_MEM_PER_CPU=1
-DEF_PARTITION=test
-DEF_JOB_NAME=Interactive
-DEF_TIME=01:00:00
+# source /sNow/snow-utils/etc/snow.env
+
 # The srun options have been defined in the slurm.conf with :
 # SallocDefaultCommand="srun -n1 -N1 --mem-per-cpu=0 --pty --preserve-env --mpi=none $SHELL"
 #DEF_RUNEXEC=
+DEF_PARTITION=test
+DEF_ARCH=hsw
+DEF_MEM_PER_CPU=1
+DEF_NUM_CPUS=1
+DEF_NUM_TASKS=1
+DEF_JOB_NAME=interactive
+DEF_TIME=01:00:00
+SRUN_BIN=/usr/bin/srun
+#SRUN_OPTS="--pty"
+SRUN_OPTS="-n1 -N1 --mem-per-cpu=0 --pty --preserve-env --mpi=none"
+INTERACTIVE_SHELL=/bin/bash
+INTERACTIVE_SHELL_OPTS=" "
 
 ######
  
@@ -40,14 +47,18 @@ function help() {
     echo -e "Usage: `basename $0` [-A] [-a] [-c] [-m] [-J] [-e]\n"
     echo "Optional arguments:"
     echo -e "\t -A: account (non-default account)"
+    echo -e "\t -p: partition (default: $DEF_PARTITION)"
     echo -e "\t -a: architecture (default: $DEF_ARCH, values hsw=Haswell skl=SkyLake wsw=Warsaw)"
+    echo -e "\t -n: number of tasks (default: $DEF_NUM_TASKS)"
     echo -e "\t -c: number of CPU cores (default: $DEF_NUM_CPUS)"
     echo -e "\t -m: amount of memory (GB) per core (default: $DEF_MEM_PER_CPU [GB])"
-    echo -e "\t -n: email address to which the begin session notification is to be sent"
+    echo -e "\t -e: email address to which the begin session notification is to be sent"
+    echo -e "\t -r: specify a reservation name"
+    echo -e "\t -w: target node"
     echo -e "\t -J: job name"
-    echo -e "\t -e: binary that you want to run interactively"
+    echo -e "\t -x: binary that you want to run interactively"
     echo -e "example : `basename $0` -A snow -a hsw -c 4 -J MyFirstInteractiveJob"
-    echo -e "example : `basename $0` -A snow -a hsw -c 4 -J MyFirstInteractiveJob -e \"MyBinary MyOptions\""
+    echo -e "example : `basename $0` -A snow -a hsw -c 4 -J MyFirstInteractiveJob -x \"MyBinary MyOptions\""
 
     echo -e "\nWritten by: Alan Orth <a.orth@cgiar.org>"
     echo -e "Modified by: Jordi Blasco <jordi.blasco@hpcnow.com>"
@@ -56,19 +67,37 @@ function help() {
 }
 
 function parse_options() {
-    while getopts ":a:c:m:n:p:J:A:e:" opt; do
+    while getopts ":A:p:a:n:c:m:e:r:w:J:x:" opt; do
         case $opt in
             a)
                 # make sure -a is passed a valid architecture
                 case $OPTARG in 
                 hsw|skl|wsw|wm|sb|ib|kepler|fermi)
-                   DEF_ARCH=$OPTARG
+                    DEF_ARCH=$OPTARG
+                    ;;
+                *)
+                    help   
+                    ;;
+               esac
+               ;; 
+            p)
+                # make sure -a is passed a valid architecture
+                case $OPTARG in 
+                serial|debug|8_cores|12_cores|16_cores|20_cores|GPU)
+                   DEF_PARTITION=$OPTARG
                   ;;
                *)
                   help   
                   ;;
                esac
                ;; 
+            n)
+                # make sure -n is passed a valid integer
+                if ! [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
+                    help
+                fi
+                NUM_TASKS=$OPTARG
+                ;;
             c)
                 # make sure -c is passed a valid integer
                 if ! [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
@@ -87,7 +116,7 @@ function parse_options() {
             p)
                 PARTITION=$OPTARG
                 ;;
-            n) 
+            e) 
                 EMAIL_NOTIFY=$OPTARG
                 ;;
             J)
@@ -96,9 +125,16 @@ function parse_options() {
             A)
                 ACCOUNT=$OPTARG
                 ;;
-            e)
+            x)
                 RUNEXEC=$OPTARG
                 ;;
+            r)
+                RES=$OPTARG
+                ;;
+            w)
+                NODELIST=$OPTARG
+                ;;
+
             \?|:)
                 help
                 ;;
@@ -110,10 +146,17 @@ function envsetup() {
     SALLOC_BIN=/usr/bin/salloc
 
     # default is to request 1 CPU, unless more are requested
-    if [[ $NUM_CPUS -gt $DEF_NUM_CPUS ]]; then
-        SALLOC_OPTS="-n $NUM_CPUS"
+    if [[ $NUM_TASKS -gt $DEF_NUM_TASKS ]]; then
+        SALLOC_OPTS="-n $NUM_TASKS"
     else
-        SALLOC_OPTS="-n $DEF_NUM_CPUS"
+        SALLOC_OPTS="-n $DEF_NUM_TASKS"
+    fi
+
+    # default is to request 1 CPU, unless more are requested
+    if [[ $NUM_CPUS -gt $DEF_NUM_CPUS ]]; then
+        SALLOC_OPTS="$SALLOC_OPTS -c $NUM_CPUS"
+    else
+        SALLOC_OPTS="$SALLOC_OPTS -c $DEF_NUM_CPUS"
     fi
 
     # default is to request 1GB of Memory / CPU, unless more are requested
@@ -130,13 +173,6 @@ function envsetup() {
         SALLOC_OPTS="$SALLOC_OPTS -J $DEF_JOB_NAME"
     fi
 
-    # see if the user specified a partition
-    if [[ -n "$PARTITION" ]]; then
-        SALLOC_OPTS="$SALLOC_OPTS -p $PARTITION"
-    else
-        SALLOC_OPTS="$SALLOC_OPTS -p $DEF_PARTITION"
-    fi
-
     if [[ -n "$EMAIL_NOTIFY" ]]; then
          SALLOC_OPTS="$SALLOC_OPTS --mail-type=BEGIN --mail-user=$EMAIL_NOTIFY"
     fi
@@ -148,10 +184,27 @@ function envsetup() {
         exit 0
     fi 
 
+    # add the partition 
+    SALLOC_OPTS="$SALLOC_OPTS -p $DEF_PARTITION"
     # add the architecture as a feature
     SALLOC_OPTS="$SALLOC_OPTS -C $DEF_ARCH"
     # add the default time limit
     SALLOC_OPTS="$SALLOC_OPTS -t $DEF_TIME"
+
+    # Check for a reservation name
+    if [[ -n "$RES" ]]; then
+        SALLOC_OPTS="$SALLOC_OPTS --reservation=$RES"
+    else
+        SALLOC_OPTS="$SALLOC_OPTS"
+    fi
+
+    # Check for a node name
+    if [[ -n "$NODELIST" ]]; then
+        SALLOC_OPTS="$SALLOC_OPTS --nodelist=$NODELIST"
+    else
+        SALLOC_OPTS="$SALLOC_OPTS"
+    fi
+
 }
 
 # pass the shell's argument array to the parsing function
@@ -165,4 +218,4 @@ fi
 # setup the defaults
 envsetup
 
-$SALLOC_BIN $SALLOC_OPTS 
+$SALLOC_BIN $SALLOC_OPTS $SRUN_BIN $SRUN_OPTS $INTERACTIVE_SHELL $INTERACTIVE_SHELL_OPTS
