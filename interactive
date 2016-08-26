@@ -27,7 +27,6 @@
 
 # The srun options have been defined in the slurm.conf with :
 # SallocDefaultCommand="srun -n1 -N1 --mem-per-cpu=0 --pty --preserve-env --mpi=none $SHELL"
-#DEF_RUNEXEC=
 DEF_PARTITION=test
 DEF_ARCH=hsw
 DEF_MEM_PER_CPU=1
@@ -186,23 +185,28 @@ function envsetup() {
 
     # add the partition 
     SALLOC_OPTS="$SALLOC_OPTS -p $DEF_PARTITION"
+
     # add the architecture as a feature
     SALLOC_OPTS="$SALLOC_OPTS -C $DEF_ARCH"
+
     # add the default time limit
     SALLOC_OPTS="$SALLOC_OPTS -t $DEF_TIME"
+
+    # check for executable
+    if [[ -n "$RUNEXEC" ]]; then
+        SRUN_OPTS=$RUNEXEC
+        unset INTERACTIVE_SHELL
+        unset INTERACTIVE_SHELL_OPTS 
+    fi
 
     # Check for a reservation name
     if [[ -n "$RES" ]]; then
         SALLOC_OPTS="$SALLOC_OPTS --reservation=$RES"
-    else
-        SALLOC_OPTS="$SALLOC_OPTS"
     fi
 
     # Check for a node name
     if [[ -n "$NODELIST" ]]; then
         SALLOC_OPTS="$SALLOC_OPTS --nodelist=$NODELIST"
-    else
-        SALLOC_OPTS="$SALLOC_OPTS"
     fi
 
 }
